@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Grant Credits — {{ balance_obj.user }}{% endblock %}
+
+{% block content %}
+<h2>Grant Credits to {{ balance_obj.user }}</h2>
+<p>Current balance: <strong>${{ balance_obj.balance|floatformat:2 }}</strong></p>
+
+<form method="post">
+    {% csrf_token %}
+    <div style="margin-bottom: 1em;">
+        <label for="amount"><strong>Amount (USD):</strong></label><br>
+        <input type="number" name="amount" id="amount" step="0.01" min="0.01" required
+               style="padding: 0.5em; width: 200px; margin-top: 0.25em;">
+    </div>
+    <div style="margin-bottom: 1em;">
+        <label for="description"><strong>Description (optional):</strong></label><br>
+        <input type="text" name="description" id="description" maxlength="500"
+               style="padding: 0.5em; width: 400px; margin-top: 0.25em;"
+               placeholder="e.g. Beta tester bonus">
+    </div>
+    <button type="submit" class="button" style="padding: 0.5em 2em;">Grant Credits</button>
+    <a href="{% url 'admin:billing_creditbalance_changelist' %}" style="margin-left: 1em;">Cancel</a>
+</form>
+{% endblock %}
