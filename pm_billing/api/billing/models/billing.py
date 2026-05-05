@@ -1,6 +1,6 @@
 from django.db import models
 from pm_utils.api.utils.models import BaseModel
-from ..abstract_models import (
+from pm_billing.api.billing.abstract_models import (
     AbstractCostTemplate,
     AbstractBillingSettings,
     AbstractCreditBalance,
