@@ -2,12 +2,16 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from pm_billing.api.billing.models import CreditBalance, BillingSettings
 from decimal import Decimal
+from .utils import requires_pm_billing_app
 
 User = get_user_model()
 
+
+@requires_pm_billing_app
 class BillingModelsTestCase(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
+            username='billing',
             email='billing@example.com',
             password='password123'
         )
