@@ -1,22 +1,31 @@
-"""Billing views — balance, transactions, Stripe checkout, webhook."""
+"""Billing views — balance, transactions, checkout, webhook."""
 import logging
 
+from django.conf import settings
 from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from ..conf import billing_settings
 from ..models import CreditBalance, CreditTransaction
+from ..providers import get_payment_provider
+from ..providers.base import PaymentProviderError
 from ..serializers.billing import (
     CheckoutSessionCreateSerializer,
     CreditBalanceSerializer,
     CreditTransactionSerializer,
 )
-from ..services.stripe import create_checkout_session, handle_checkout_completed
 
 logger = logging.getLogger(__name__)
+
+
+class CheckoutRateThrottle(UserRateThrottle):
+    """Limit checkout creation/capture attempts per user."""
+
+    rate = '10/hour'
+    scope = 'checkout'
 
 
 class BalanceView(APIView):
@@ -28,7 +37,9 @@ class BalanceView(APIView):
         balance_obj, _ = CreditBalance.objects.get_or_create(user=request.user)
         serializer = CreditBalanceSerializer(balance_obj)
         data = serializer.data
-        data['stripe_enabled'] = bool(billing_settings.stripe_secret_key)
+        data['payment_enabled'] = get_payment_provider().is_configured()
+        data['payment_provider'] = getattr(settings, 'PAYMENT_PROVIDER', 'stripe')
+        data['stripe_enabled'] = data['payment_enabled']
         return Response(data)
 
 
@@ -45,36 +56,85 @@ class TransactionListView(ListAPIView):
 
 
 class CheckoutView(APIView):
-    """POST to create a Stripe Checkout session for purchasing credits."""
+    """POST to create a checkout session/order with the active provider."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [CheckoutRateThrottle]
 
     def post(self, request):
-        if not billing_settings.stripe_secret_key:
-            return Response(
-                {'error': 'Billing is temporarily unavailable.', 'billing_disabled': True},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
         serializer = CheckoutSessionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        provider = get_payment_provider()
+        if not provider.is_configured():
+            return Response(
+                {
+                    'error': 'Billing is temporarily unavailable.',
+                    'billing_disabled': True,
+                    'payment_provider': getattr(settings, 'PAYMENT_PROVIDER', 'stripe'),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         amount = serializer.validated_data['amount']
-        success_url = serializer.validated_data.get('success_url')
-        cancel_url = serializer.validated_data.get('cancel_url')
+        success_url = serializer.validated_data.get('success_url', '')
+        cancel_url = serializer.validated_data.get('cancel_url', '')
 
         try:
-            result = create_checkout_session(
+            result = provider.create_checkout(
                 user=request.user,
                 amount=amount,
                 success_url=success_url,
                 cancel_url=cancel_url,
             )
             return Response(result, status=status.HTTP_200_OK)
+        except PaymentProviderError as e:
+            logger.warning(
+                "Payment provider failed to create checkout: provider=%s code=%s diagnostics=%s",
+                e.provider,
+                e.code,
+                e.diagnostics,
+            )
+            return Response(e.as_response_data(), status=e.status_code)
         except Exception as e:
             logger.error(f"Failed to create checkout session: {e}")
             return Response(
                 {'error': 'Failed to create checkout session.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class CheckoutCaptureView(APIView):
+    """POST to capture a provider checkout after hosted approval."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [CheckoutRateThrottle]
+
+    def post(self, request):
+        provider = get_payment_provider()
+        capture_checkout = getattr(provider, 'capture_checkout', None)
+        if not callable(capture_checkout):
+            return Response(
+                {'error': 'The active payment provider does not require checkout capture.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order_id = request.data.get('order_id') or request.data.get('session_id')
+        try:
+            result = capture_checkout(request.user, order_id)
+            return Response(result, status=status.HTTP_200_OK)
+        except PaymentProviderError as e:
+            logger.warning(
+                "Payment provider failed to capture checkout: provider=%s code=%s diagnostics=%s",
+                e.provider,
+                e.code,
+                e.diagnostics,
+            )
+            return Response(e.as_response_data(), status=e.status_code)
+        except Exception as e:
+            logger.error(f"Failed to capture checkout: {e}")
+            return Response(
+                {'error': 'Failed to capture checkout.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -86,26 +146,16 @@ class StripeWebhookView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        try:
-            import stripe  # noqa: PLC0415
-        except ImportError:
-            logger.error("stripe package not installed; webhook rejected")
-            return Response({'error': 'Billing not available.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        from ..providers.stripe import StripeProvider
+        return StripeProvider().handle_webhook(request)
 
-        payload = request.body
-        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
-        webhook_secret = billing_settings.stripe_webhook_secret
 
-        try:
-            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-        except ValueError:
-            logger.warning("Invalid Stripe webhook payload")
-            return Response({'error': 'Invalid payload'}, status=status.HTTP_400_BAD_REQUEST)
-        except stripe.error.SignatureVerificationError:
-            logger.warning("Invalid Stripe webhook signature")
-            return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+class PayPalWebhookView(APIView):
+    """POST endpoint for PayPal webhook events."""
 
-        if event['type'] == 'checkout.session.completed':
-            handle_checkout_completed(event['data']['object'])
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
-        return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+    def post(self, request):
+        from ..providers.paypal import PayPalProvider
+        return PayPalProvider().handle_webhook(request)

@@ -34,8 +34,10 @@ def add_credits(
     transaction_type='purchase',
     description='',
     reference_id='',
+    payment_provider='stripe',
     stripe_payment_intent_id='',
     stripe_checkout_session_id='',
+    external_order_id='',
 ):
     """Add credits to a user's balance atomically."""
     amount = Decimal(str(amount))
@@ -57,8 +59,10 @@ def add_credits(
             transaction_type=transaction_type,
             reference_id=str(reference_id),
             description=description,
+            payment_provider=payment_provider,
             stripe_payment_intent_id=stripe_payment_intent_id,
             stripe_checkout_session_id=stripe_checkout_session_id,
+            external_order_id=external_order_id,
         )
 
     logger.info(

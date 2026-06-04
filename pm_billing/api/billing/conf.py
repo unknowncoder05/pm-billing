@@ -13,6 +13,13 @@ class BillingSettings:
         self._stripe_webhook_secret = getattr(settings, 'STRIPE_WEBHOOK_SECRET', None)
         self._stripe_success_url = getattr(settings, 'STRIPE_SUCCESS_URL', 'http://localhost:3000/billing/success')
         self._stripe_cancel_url = getattr(settings, 'STRIPE_CANCEL_URL', 'http://localhost:3000/billing/cancel')
+        self._payment_provider = getattr(settings, 'PAYMENT_PROVIDER', 'stripe')
+        self._paypal_client_id = getattr(settings, 'PAYPAL_CLIENT_ID', None)
+        self._paypal_client_secret = getattr(settings, 'PAYPAL_CLIENT_SECRET', None)
+        self._paypal_webhook_id = getattr(settings, 'PAYPAL_WEBHOOK_ID', None)
+        self._paypal_environment = getattr(settings, 'PAYPAL_ENVIRONMENT', 'live')
+        self._paypal_success_url = getattr(settings, 'PAYPAL_SUCCESS_URL', 'http://localhost:3000/billing?provider=paypal&success=true')
+        self._paypal_cancel_url = getattr(settings, 'PAYPAL_CANCEL_URL', 'http://localhost:3000/billing?cancelled=true')
         self._credit_minimum_balance = getattr(settings, 'CREDIT_MINIMUM_BALANCE', '0.00')
         self._credit_cost_markup = getattr(settings, 'CREDIT_COST_MARKUP', '1.0')
 
@@ -31,6 +38,34 @@ class BillingSettings:
     @property
     def stripe_cancel_url(self):
         return self._stripe_cancel_url
+
+    @property
+    def payment_provider(self):
+        return self._payment_provider
+
+    @property
+    def paypal_client_id(self):
+        return self._paypal_client_id
+
+    @property
+    def paypal_client_secret(self):
+        return self._paypal_client_secret
+
+    @property
+    def paypal_webhook_id(self):
+        return self._paypal_webhook_id
+
+    @property
+    def paypal_environment(self):
+        return self._paypal_environment
+
+    @property
+    def paypal_success_url(self):
+        return self._paypal_success_url
+
+    @property
+    def paypal_cancel_url(self):
+        return self._paypal_cancel_url
 
     @property
     def credit_minimum_balance(self):
@@ -52,6 +87,13 @@ def reload_billing_settings(*args, **kwargs):
         "STRIPE_WEBHOOK_SECRET",
         "STRIPE_SUCCESS_URL",
         "STRIPE_CANCEL_URL",
+        "PAYMENT_PROVIDER",
+        "PAYPAL_CLIENT_ID",
+        "PAYPAL_CLIENT_SECRET",
+        "PAYPAL_WEBHOOK_ID",
+        "PAYPAL_ENVIRONMENT",
+        "PAYPAL_SUCCESS_URL",
+        "PAYPAL_CANCEL_URL",
         "CREDIT_MINIMUM_BALANCE",
         "CREDIT_COST_MARKUP",
     ]:

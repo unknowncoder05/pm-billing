@@ -4,6 +4,7 @@ from pm_billing.api.billing.abstract_models import (
     AbstractCostTemplate,
     AbstractBillingSettings,
     AbstractCreditBalance,
+    AbstractPayPalCheckoutSession,
     AbstractCreditTransaction,
 )
 
@@ -35,5 +36,16 @@ class CreditTransaction(AbstractCreditTransaction):
             models.Index(fields=['transaction_type']),
             models.Index(fields=['stripe_payment_intent_id']),
             models.Index(fields=['stripe_checkout_session_id']),
+            models.Index(fields=['external_order_id']),
             models.Index(fields=['context_type', 'context_id']),
+        ]
+
+
+class PayPalCheckoutSession(AbstractPayPalCheckoutSession):
+    class Meta(AbstractPayPalCheckoutSession.Meta):
+        abstract = False
+        app_label = 'pm_billing'
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['status']),
         ]

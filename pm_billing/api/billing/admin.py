@@ -7,7 +7,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import BillingSettings, CostTemplate, CreditBalance, CreditTransaction
+from .models import BillingSettings, CostTemplate, CreditBalance, CreditTransaction, PayPalCheckoutSession
 from .services.credits import add_credits
 
 
@@ -110,14 +110,34 @@ class CreditBalanceAdmin(admin.ModelAdmin):
 class CreditTransactionAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'user', 'amount', 'balance_after',
-        'transaction_type', 'context_type', 'context_id', 'reference_id', 'created_at',
+        'transaction_type', 'payment_provider', 'context_type', 'context_id', 'reference_id', 'created_at',
     ]
-    list_filter = ['transaction_type', 'context_type', 'created_at']
-    search_fields = ['user__username', 'user__email', 'reference_id', 'description']
+    list_filter = ['transaction_type', 'payment_provider', 'context_type', 'created_at']
+    search_fields = ['user__username', 'user__email', 'reference_id', 'external_order_id', 'description']
     readonly_fields = [
         'user', 'amount', 'balance_after', 'transaction_type',
-        'reference_id', 'description', 'stripe_payment_intent_id',
-        'stripe_checkout_session_id', 'context_type', 'context_id', 'created_at',
+        'reference_id', 'description', 'payment_provider', 'stripe_payment_intent_id',
+        'stripe_checkout_session_id', 'external_order_id', 'context_type', 'context_id', 'created_at',
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PayPalCheckoutSession)
+class PayPalCheckoutSessionAdmin(admin.ModelAdmin):
+    list_display = ['order_id', 'user', 'amount', 'currency', 'status', 'created_at', 'updated_at']
+    list_filter = ['status', 'currency', 'created_at']
+    search_fields = ['order_id', 'user__username', 'user__email', 'last_error']
+    readonly_fields = [
+        'user', 'order_id', 'amount', 'currency', 'status', 'last_error',
+        'diagnostics', 'created_at', 'updated_at',
     ]
 
     def has_add_permission(self, request):

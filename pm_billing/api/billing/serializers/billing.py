@@ -54,7 +54,7 @@ class CreditTransactionSerializer(serializers.ModelSerializer):
 
 
 class CheckoutSessionCreateSerializer(serializers.Serializer):
-    """Serializer for creating a Stripe Checkout session."""
+    """Serializer for creating a checkout session/order."""
 
     amount = serializers.DecimalField(
         max_digits=10,

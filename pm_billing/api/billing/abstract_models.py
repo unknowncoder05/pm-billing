@@ -163,6 +163,12 @@ class AbstractCreditTransaction(models.Model):
         blank=True,
         default='',
     )
+    payment_provider = models.CharField(
+        max_length=30,
+        blank=True,
+        default='stripe',
+        help_text=_("Which payment provider processed this transaction"),
+    )
     stripe_payment_intent_id = models.CharField(
         max_length=255,
         blank=True,
@@ -173,6 +179,12 @@ class AbstractCreditTransaction(models.Model):
         blank=True,
         default='',
         help_text=_("Used for idempotency on webhook processing"),
+    )
+    external_order_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text=_("Provider-agnostic order/session ID for idempotency"),
     )
     context_type = models.CharField(
         max_length=50,
@@ -196,3 +208,36 @@ class AbstractCreditTransaction(models.Model):
     def __str__(self):
         sign = '+' if self.amount >= 0 else ''
         return f"{self.user} {sign}{self.amount:.6f} ({self.transaction_type})"
+
+
+class AbstractPayPalCheckoutSession(models.Model):
+    """Pending/completed PayPal checkout metadata."""
+
+    STATUS_CHOICES = [
+        ('created', _('Created')),
+        ('captured', _('Captured')),
+        ('credited', _('Credited')),
+        ('failed', _('Failed')),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='paypal_checkout_sessions',
+    )
+    order_id = models.CharField(max_length=255, unique=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='USD')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='created')
+    last_error = models.TextField(blank=True, default='')
+    diagnostics = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        verbose_name = _('PayPal Checkout Session')
+        verbose_name_plural = _('PayPal Checkout Sessions')
+
+    def __str__(self):
+        return f"PayPal {self.order_id} user={self.user_id} ${self.amount}"
